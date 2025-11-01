@@ -8,14 +8,14 @@ class Simulator {
         
         // Simulation parameters
         this.temperature = 1.0;
-        this.attractionStrength = 1.0;
+        this.attractionStrength = 0.2;
         this.electromagneticStrength = 100;
         this.thermalNoise = 0.5;
-        this.damping = 0.98;
-        this.maxVelocity = 10;
-        this.springConstant = 0.1;
+        this.damping = 0.17;
+        this.maxVelocity = 40;
+        this.springConstant = 1.0;
         this.boundaryMode = 'wrap'; // 'wrap', 'bounce', 'contain'
-        this.collisionStrength = 500; // Strength of collision repulsion
+        this.collisionStrength = 350; // Strength of collision repulsion
         this.minDistance = 2; // Minimum distance before strong repulsion kicks in
         
         // Pan/Zoom parameters
@@ -27,11 +27,15 @@ class Simulator {
         this.panStartY = 0;
         
         // Scene size (actual simulation area)
-        this.sceneWidth = 1000;
-        this.sceneHeight = 700;
+        this.sceneWidth = 1500;
+        this.sceneHeight = 1500;
+        
+        // Spatial partitioning for performance
+        this.spatialGrid = new SpatialGrid(this.sceneWidth, this.sceneHeight, 150);
+        this.useSpatialPartitioning = true; // Enable by default (only for >50 particles)
         
         // UI flags
-        this.showForces = true;
+        this.showForces = false;
         this.showEnergyMap = false;
         this.paused = false;
         
@@ -75,6 +79,14 @@ class Simulator {
     update() {
         if (this.paused) return;
         
+        // Rebuild spatial grid if needed (only for larger particle counts)
+        if (this.useSpatialPartitioning && this.atoms.length > 50) {
+            // Update grid size if scene changed
+            if (this.spatialGrid.width !== this.sceneWidth || this.spatialGrid.height !== this.sceneHeight) {
+                this.spatialGrid = new SpatialGrid(this.sceneWidth, this.sceneHeight, 150);
+            }
+        }
+        
         // Calculate all forces
         this.calculateCollisionForces(); // First: prevent overlaps
         this.calculateElectromagneticForces();
@@ -100,71 +112,153 @@ class Simulator {
     }
     
     calculateCollisionForces() {
-        // Prevent atoms from overlapping - strong repulsion when too close
-        for (let i = 0; i < this.atoms.length; i++) {
-            for (let j = i + 1; j < this.atoms.length; j++) {
+        if (this.useSpatialPartitioning && this.atoms.length > 50) {
+            // Use spatial grid for better performance
+            this.spatialGrid.rebuild(this.atoms);
+            
+            const checkedPairs = new Set();
+            
+            for (let i = 0; i < this.atoms.length; i++) {
                 const atom1 = this.atoms[i];
-                const atom2 = this.atoms[j];
+                const searchRadius = atom1.radius * 2 + this.minDistance * 2;
+                const neighbors = this.spatialGrid.getNeighbors(atom1.pos.x, atom1.pos.y, searchRadius);
                 
-                const displacement = p5.Vector.sub(atom2.pos, atom1.pos);
-                const distance = displacement.mag();
-                const minSeparation = atom1.radius + atom2.radius + this.minDistance;
-                
-                // Strong repulsion if atoms are too close
-                if (distance < minSeparation && distance > 0) {
-                    // Use inverse distance with strong force when overlapping
-                    const overlap = minSeparation - distance;
-                    const forceMagnitude = this.collisionStrength * overlap / (distance * distance + 0.1);
-                    const force = displacement.normalize().mult(forceMagnitude);
+                for (let entry of neighbors) {
+                    const atom2 = entry.particle;
+                    const j = entry.index;
                     
-                    // Apply stronger force to lighter atoms
-                    const massRatio1 = atom2.mass / (atom1.mass + atom2.mass);
-                    const massRatio2 = atom1.mass / (atom1.mass + atom2.mass);
+                    // Skip self and already processed pairs
+                    if (i >= j) continue;
                     
-                    atom1.applyForce(force.mult(-massRatio1));
-                    atom2.applyForce(force.mult(massRatio2));
+                    const pairKey = i < j ? `${i},${j}` : `${j},${i}`;
+                    if (checkedPairs.has(pairKey)) continue;
+                    checkedPairs.add(pairKey);
+                    
+                    const displacement = p5.Vector.sub(atom2.pos, atom1.pos);
+                    const distance = displacement.mag();
+                    const minSeparation = atom1.radius + atom2.radius + this.minDistance;
+                    
+                    // Strong repulsion if atoms are too close
+                    if (distance < minSeparation && distance > 0) {
+                        const overlap = minSeparation - distance;
+                        const forceMagnitude = this.collisionStrength * overlap / (distance * distance + 0.1);
+                        const force = displacement.normalize().mult(forceMagnitude);
+                        
+                        const massRatio1 = atom2.mass / (atom1.mass + atom2.mass);
+                        const massRatio2 = atom1.mass / (atom1.mass + atom2.mass);
+                        
+                        atom1.applyForce(force.mult(-massRatio1));
+                        atom2.applyForce(force.mult(massRatio2));
+                    }
+                }
+            }
+        } else {
+            // Original O(N²) method for small particle counts
+            for (let i = 0; i < this.atoms.length; i++) {
+                for (let j = i + 1; j < this.atoms.length; j++) {
+                    const atom1 = this.atoms[i];
+                    const atom2 = this.atoms[j];
+                    
+                    const displacement = p5.Vector.sub(atom2.pos, atom1.pos);
+                    const distance = displacement.mag();
+                    const minSeparation = atom1.radius + atom2.radius + this.minDistance;
+                    
+                    if (distance < minSeparation && distance > 0) {
+                        const overlap = minSeparation - distance;
+                        const forceMagnitude = this.collisionStrength * overlap / (distance * distance + 0.1);
+                        const force = displacement.normalize().mult(forceMagnitude);
+                        
+                        const massRatio1 = atom2.mass / (atom1.mass + atom2.mass);
+                        const massRatio2 = atom1.mass / (atom1.mass + atom2.mass);
+                        
+                        atom1.applyForce(force.mult(-massRatio1));
+                        atom2.applyForce(force.mult(massRatio2));
+                    }
                 }
             }
         }
     }
     
     calculateElectromagneticForces() {
-        // Calculate electromagnetic attraction/repulsion between all atom pairs
-        for (let i = 0; i < this.atoms.length; i++) {
-            for (let j = i + 1; j < this.atoms.length; j++) {
+        if (this.useSpatialPartitioning && this.atoms.length > 50) {
+            // Use spatial grid
+            const checkedPairs = new Set();
+            
+            for (let i = 0; i < this.atoms.length; i++) {
                 const atom1 = this.atoms[i];
-                const atom2 = this.atoms[j];
+                const maxInteractionRadius = Math.max(atom1.attractionRadius, 200); // Reasonable max distance
+                const neighbors = this.spatialGrid.getNeighbors(atom1.pos.x, atom1.pos.y, maxInteractionRadius);
                 
-                // Skip if already bonded (bond force handles that)
-                if (atom1.isBondedTo(atom2)) continue;
-                
-                const displacement = p5.Vector.sub(atom2.pos, atom1.pos);
-                const distance = displacement.mag();
-                
-                // Avoid division by zero
-                if (distance < 1) continue;
-                
-                // Only apply electromagnetic forces if not in collision range
-                const minSeparation = atom1.radius + atom2.radius + this.minDistance;
-                if (distance < minSeparation) continue;
-                
-                // Inverse square law for electromagnetic force
-                const chargeProduct = atom1.charge * atom2.charge;
-                const forceMagnitude = (this.electromagneticStrength * chargeProduct) / (distance * distance);
-                
-                // Attraction for opposite charges, repulsion for like charges
-                const force = displacement.normalize().mult(forceMagnitude);
-                
-                atom1.applyForce(force.mult(-1));
-                atom2.applyForce(force);
-                
-                // Check if atoms are within bonding distance and can form a bond
-                if (distance < (atom1.bondingDistance + atom2.bondingDistance) / 2) {
-                    // Additional attraction for potential bonding
-                    const bondingAttraction = this.attractionStrength * 50 / (distance * distance);
-                    const bondForce = displacement.normalize().mult(bondingAttraction);
-                    atom1.applyForce(bondForce.mult(-1));
-                    atom2.applyForce(bondForce);
+                for (let entry of neighbors) {
+                    const atom2 = entry.particle;
+                    const j = entry.index;
+                    
+                    if (i >= j) continue; // Skip self and duplicates
+                    
+                    // Skip if already bonded
+                    if (atom1.isBondedTo(atom2)) continue;
+                    
+                    const pairKey = i < j ? `${i},${j}` : `${j},${i}`;
+                    if (checkedPairs.has(pairKey)) continue;
+                    checkedPairs.add(pairKey);
+                    
+                    const displacement = p5.Vector.sub(atom2.pos, atom1.pos);
+                    const distance = displacement.mag();
+                    
+                    if (distance < 1) continue;
+                    
+                    const minSeparation = atom1.radius + atom2.radius + this.minDistance;
+                    if (distance < minSeparation) continue;
+                    
+                    // Inverse square law for electromagnetic force
+                    const chargeProduct = atom1.charge * atom2.charge;
+                    const forceMagnitude = (this.electromagneticStrength * chargeProduct) / (distance * distance);
+                    
+                    const force = displacement.normalize().mult(forceMagnitude);
+                    
+                    atom1.applyForce(force.mult(-1));
+                    atom2.applyForce(force);
+                    
+                    // Check bonding distance
+                    if (distance < (atom1.bondingDistance + atom2.bondingDistance) / 2) {
+                        const bondingAttraction = this.attractionStrength * 50 / (distance * distance);
+                        const bondForce = displacement.normalize().mult(bondingAttraction);
+                        atom1.applyForce(bondForce.mult(-1));
+                        atom2.applyForce(bondForce);
+                    }
+                }
+            }
+        } else {
+            // Original O(N²) method
+            for (let i = 0; i < this.atoms.length; i++) {
+                for (let j = i + 1; j < this.atoms.length; j++) {
+                    const atom1 = this.atoms[i];
+                    const atom2 = this.atoms[j];
+                    
+                    if (atom1.isBondedTo(atom2)) continue;
+                    
+                    const displacement = p5.Vector.sub(atom2.pos, atom1.pos);
+                    const distance = displacement.mag();
+                    
+                    if (distance < 1) continue;
+                    
+                    const minSeparation = atom1.radius + atom2.radius + this.minDistance;
+                    if (distance < minSeparation) continue;
+                    
+                    const chargeProduct = atom1.charge * atom2.charge;
+                    const forceMagnitude = (this.electromagneticStrength * chargeProduct) / (distance * distance);
+                    
+                    const force = displacement.normalize().mult(forceMagnitude);
+                    
+                    atom1.applyForce(force.mult(-1));
+                    atom2.applyForce(force);
+                    
+                    if (distance < (atom1.bondingDistance + atom2.bondingDistance) / 2) {
+                        const bondingAttraction = this.attractionStrength * 50 / (distance * distance);
+                        const bondForce = displacement.normalize().mult(bondingAttraction);
+                        atom1.applyForce(bondForce.mult(-1));
+                        atom2.applyForce(bondForce);
+                    }
                 }
             }
         }
@@ -187,29 +281,61 @@ class Simulator {
     }
     
     attemptBondFormation() {
-        // Try to form bonds between nearby atoms
-        for (let i = 0; i < this.atoms.length; i++) {
-            for (let j = i + 1; j < this.atoms.length; j++) {
+        if (this.useSpatialPartitioning && this.atoms.length > 50) {
+            // Use spatial grid for bond formation
+            const checkedPairs = new Set();
+            
+            for (let i = 0; i < this.atoms.length; i++) {
                 const atom1 = this.atoms[i];
-                const atom2 = this.atoms[j];
+                const maxBondRange = Math.max(atom1.bondingDistance, 100);
+                const neighbors = this.spatialGrid.getNeighbors(atom1.pos.x, atom1.pos.y, maxBondRange);
                 
-                // Skip if already bonded
-                if (atom1.isBondedTo(atom2)) continue;
-                
-                // Skip if either atom has no available valency
-                if (!atom1.canFormBond() || !atom2.canFormBond()) continue;
-                
-                const distance = atom1.pos.dist(atom2.pos);
-                const maxBondDistance = (atom1.bondingDistance + atom2.bondingDistance) / 2;
-                
-                // Check if atoms are close enough and conditions are favorable
-                if (distance < maxBondDistance) {
-                    // Probability of bond formation (higher for compatible atoms)
-                    const compatibility = this.calculateCompatibility(atom1, atom2);
-                    const formationChance = compatibility * (1 - distance / maxBondDistance);
+                for (let entry of neighbors) {
+                    const atom2 = entry.particle;
+                    const j = entry.index;
                     
-                    if (random() < formationChance * 0.05) { // Formation rate
-                        this.formBond(atom1, atom2);
+                    if (i >= j) continue;
+                    
+                    if (atom1.isBondedTo(atom2)) continue;
+                    if (!atom1.canFormBond() || !atom2.canFormBond()) continue;
+                    
+                    const pairKey = i < j ? `${i},${j}` : `${j},${i}`;
+                    if (checkedPairs.has(pairKey)) continue;
+                    checkedPairs.add(pairKey);
+                    
+                    const distance = atom1.pos.dist(atom2.pos);
+                    const maxBondDistance = (atom1.bondingDistance + atom2.bondingDistance) / 2;
+                    
+                    if (distance < maxBondDistance) {
+                        const compatibility = this.calculateCompatibility(atom1, atom2);
+                        const formationChance = compatibility * (1 - distance / maxBondDistance);
+                        
+                        if (random() < formationChance * 0.05) {
+                            this.formBond(atom1, atom2);
+                        }
+                    }
+                }
+            }
+        } else {
+            // Original method
+            for (let i = 0; i < this.atoms.length; i++) {
+                for (let j = i + 1; j < this.atoms.length; j++) {
+                    const atom1 = this.atoms[i];
+                    const atom2 = this.atoms[j];
+                    
+                    if (atom1.isBondedTo(atom2)) continue;
+                    if (!atom1.canFormBond() || !atom2.canFormBond()) continue;
+                    
+                    const distance = atom1.pos.dist(atom2.pos);
+                    const maxBondDistance = (atom1.bondingDistance + atom2.bondingDistance) / 2;
+                    
+                    if (distance < maxBondDistance) {
+                        const compatibility = this.calculateCompatibility(atom1, atom2);
+                        const formationChance = compatibility * (1 - distance / maxBondDistance);
+                        
+                        if (random() < formationChance * 0.05) {
+                            this.formBond(atom1, atom2);
+                        }
                     }
                 }
             }
@@ -337,6 +463,9 @@ class Simulator {
         text(`Bonds: ${this.bonds.length}`, 10, 30);
         text(`Molecules: ${this.countMolecules()}`, 10, 50);
         text(this.paused ? 'PAUSED' : 'RUNNING', 10, 70);
+        if (this.useSpatialPartitioning && this.atoms.length > 50) {
+            text('Optimized (Spatial Grid)', 10, 90);
+        }
         pop();
     }
     
@@ -366,6 +495,65 @@ class Simulator {
         }
         
         return moleculeCount;
+    }
+    
+    getMoleculeStats() {
+        // Get detailed molecule statistics
+        const visited = new Set();
+        const molecules = [];
+        
+        for (let atom of this.atoms) {
+            if (!visited.has(atom)) {
+                const molecule = [];
+                const queue = [atom];
+                visited.add(atom);
+                molecule.push(atom);
+                
+                while (queue.length > 0) {
+                    const current = queue.shift();
+                    for (let bond of current.bonds) {
+                        const other = bond.getOtherAtom(current);
+                        if (!visited.has(other)) {
+                            visited.add(other);
+                            queue.push(other);
+                            molecule.push(other);
+                        }
+                    }
+                }
+                molecules.push(molecule);
+            }
+        }
+        
+        // Count molecules by size
+        const sizeCounts = {};
+        let largestMolecule = null;
+        let largestSize = 0;
+        let mostPopularSize = 0;
+        let mostPopularCount = 0;
+        
+        for (let molecule of molecules) {
+            const size = molecule.length;
+            sizeCounts[size] = (sizeCounts[size] || 0) + 1;
+            
+            if (size > largestSize) {
+                largestSize = size;
+                largestMolecule = molecule;
+            }
+            
+            if (sizeCounts[size] > mostPopularCount) {
+                mostPopularCount = sizeCounts[size];
+                mostPopularSize = size;
+            }
+        }
+        
+        return {
+            total: molecules.length,
+            largestSize: largestSize,
+            mostPopularSize: mostPopularSize,
+            mostPopularCount: mostPopularCount,
+            sizeDistribution: sizeCounts,
+            loneAtoms: sizeCounts[1] || 0
+        };
     }
     
     reset(numTypes) {

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Atomic Bonds Simulator</title>
+    <title>Molecule Simulator</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.js"></script>
     <style>
         body {
@@ -107,12 +107,24 @@
         .randomize-type-btn {
             width: 100%;
             padding: 6px;
-            background: #ff9800;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.3);
             font-size: 11px;
             margin-top: 8px;
         }
         .randomize-type-btn:hover {
-            background: #f57c00;
+            background: rgba(255, 255, 255, 0.2);
+        }
+        .lock-checkbox {
+            width: 14px;
+            height: 14px;
+            margin-left: 5px;
+            cursor: pointer;
+        }
+        .control-with-lock {
+            display: flex;
+            align-items: center;
+            gap: 5px;
         }
         h1 {
             margin: 0 0 20px 0;
@@ -237,21 +249,60 @@
 </head>
 <body>
     <div id="sidebar">
-        <h1>Atomic Bonds Simulator</h1>
+        <h1>Molecule Simulator</h1>
+        
+        <div id="statistics-panel" class="info-panel" style="margin-bottom: 20px;">
+            <h3 style="margin: 0 0 10px 0; font-size: 13px; border-bottom: 1px solid rgba(255, 255, 255, 0.3); padding-bottom: 5px;">Statistics</h3>
+            <div id="stats-content" style="font-size: 11px; line-height: 1.6;">
+                <div><strong>Atoms:</strong> <span id="stat-atoms">0</span></div>
+                <div><strong>Bonds:</strong> <span id="stat-bonds">0</span></div>
+                <div><strong>Molecules:</strong> <span id="stat-molecules">0</span></div>
+                <div><strong>Lone Atoms:</strong> <span id="stat-lone">0</span></div>
+                <div><strong>Largest Molecule:</strong> <span id="stat-largest">0</span> atoms</div>
+                <div><strong>Most Popular:</strong> Size <span id="stat-popular-size">0</span> (<span id="stat-popular-count">0</span> molecules)</div>
+            </div>
+            <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255, 255, 255, 0.3);">
+                <h4 style="margin: 0 0 8px 0; font-size: 12px; font-weight: bold;">Debug Info</h4>
+                <div id="debug-content" style="font-size: 11px; line-height: 1.6;">
+                    <div>Frame: <span id="stat-frame">0</span></div>
+                    <div>FPS: <span id="stat-fps">0</span></div>
+                    <div>Avg Velocity: <span id="stat-avg-velocity">0.00</span></div>
+                    <div>Mode: <span id="stat-mode">Standard</span></div>
+                    <div>Scene: <span id="stat-scene">0x0</span></div>
+                    <div>Zoom: <span id="stat-zoom">1.00x</span></div>
+                </div>
+            </div>
+        </div>
         
         <div class="control-group">
-            <label for="temperature">Temperature (0-10):</label>
+            <label for="temperature">Temperature (0-100):</label>
             <div class="control-row">
-                <input type="range" id="temperature" min="0" max="10" step="0.1" value="1.0">
-                <input type="number" id="temperature-input" min="0" max="10" step="0.1" value="1.0">
+                <input type="range" id="temperature" min="0" max="100" step="0.1" value="1.0">
+                <input type="number" id="temperature-input" min="0" max="100" step="0.1" value="1.0">
             </div>
         </div>
         
         <div class="control-group">
             <label for="attraction">Attraction Strength (0-10):</label>
             <div class="control-row">
-                <input type="range" id="attraction" min="0" max="10" step="0.1" value="1.0">
-                <input type="number" id="attraction-input" min="0" max="10" step="0.1" value="1.0">
+                <input type="range" id="attraction" min="0" max="10" step="0.1" value="0.2">
+                <input type="number" id="attraction-input" min="0" max="10" step="0.1" value="0.2">
+            </div>
+        </div>
+        
+        <div class="control-group">
+            <label for="electromagnetic-strength">Electromagnetic Strength (0-500):</label>
+            <div class="control-row">
+                <input type="range" id="electromagnetic-strength" min="0" max="500" step="10" value="100">
+                <input type="number" id="electromagnetic-strength-input" value="100">
+            </div>
+        </div>
+        
+        <div class="control-group">
+            <label for="thermal-noise">Thermal Noise (0-5):</label>
+            <div class="control-row">
+                <input type="range" id="thermal-noise" min="0" max="5" step="0.1" value="0.5">
+                <input type="number" id="thermal-noise-input" value="0.5">
             </div>
         </div>
         
@@ -264,50 +315,58 @@
         </div>
         
         <div class="control-group">
-            <label for="damping">Damping (0.5-1.0):</label>
+            <label for="damping">Damping (0.1-1.0):</label>
             <div class="control-row">
-                <input type="range" id="damping" min="0.5" max="1.0" step="0.01" value="0.98">
-                <input type="number" id="damping-input" min="0.5" max="1.0" step="0.01" value="0.98">
+                <input type="range" id="damping" min="0.1" max="1.0" step="0.01" value="0.17">
+                <input type="number" id="damping-input" min="0.1" max="1.0" step="0.01" value="0.17">
             </div>
         </div>
         
         <div class="control-group">
             <label for="max-velocity">Max Velocity (1-50):</label>
             <div class="control-row">
-                <input type="range" id="max-velocity" min="1" max="50" step="1" value="10">
-                <input type="number" id="max-velocity-input" min="1" max="50" step="1" value="10">
+                <input type="range" id="max-velocity" min="1" max="50" step="1" value="40">
+                <input type="number" id="max-velocity-input" min="1" max="50" step="1" value="40">
             </div>
         </div>
         
         <div class="control-group">
             <label for="spring-constant">Spring Stiffness (0.01-2.0):</label>
             <div class="control-row">
-                <input type="range" id="spring-constant" min="0.01" max="2.0" step="0.01" value="0.1">
-                <input type="number" id="spring-constant-input" min="0.01" max="2.0" step="0.01" value="0.1">
+                <input type="range" id="spring-constant" min="0.01" max="2.0" step="0.01" value="1.0">
+                <input type="number" id="spring-constant-input" min="0.01" max="2.0" step="0.01" value="1.0">
             </div>
         </div>
         
         <div class="control-group">
             <label for="collision-strength">Collision Strength (100-2000):</label>
             <div class="control-row">
-                <input type="range" id="collision-strength" min="100" max="2000" step="50" value="500">
-                <input type="number" id="collision-strength-input" min="100" max="2000" step="50" value="500">
+                <input type="range" id="collision-strength" min="100" max="2000" step="50" value="350">
+                <input type="number" id="collision-strength-input" min="100" max="2000" step="50" value="350">
+            </div>
+        </div>
+        
+        <div class="control-group">
+            <label for="min-distance">Min Distance (0.5-10):</label>
+            <div class="control-row">
+                <input type="range" id="min-distance" min="0.5" max="10" step="0.5" value="2">
+                <input type="number" id="min-distance-input" value="2">
             </div>
         </div>
         
         <div class="control-group">
             <label for="scene-width">Scene Width:</label>
             <div class="control-row">
-                <input type="range" id="scene-width" min="500" max="5000" step="100" value="1000">
-                <input type="number" id="scene-width-input" value="1000">
+                <input type="range" id="scene-width" min="500" max="5000" step="100" value="1500">
+                <input type="number" id="scene-width-input" value="1500">
             </div>
         </div>
         
         <div class="control-group">
             <label for="scene-height">Scene Height:</label>
             <div class="control-row">
-                <input type="range" id="scene-height" min="500" max="5000" step="100" value="700">
-                <input type="number" id="scene-height-input" value="700">
+                <input type="range" id="scene-height" min="500" max="5000" step="100" value="1500">
+                <input type="number" id="scene-height-input" value="1500">
             </div>
         </div>
         
@@ -324,35 +383,10 @@
         <button id="randomize-btn">Randomize</button>
         
         <div class="checkbox-group">
-            <label><input type="checkbox" id="show-forces" checked> Show Forces</label>
+            <label><input type="checkbox" id="show-forces"> Show Forces</label>
             <label><input type="checkbox" id="show-energy"> Show Energy Map</label>
         </div>
         
-        <div class="info-panel">
-            <h3>Particle Colors & Sizes</h3>
-            <div class="legend-item">
-                <div class="legend-color" style="background: rgb(255, 100, 100);"></div>
-                <div><strong>Red/Pink:</strong> Light atoms (H, Li, Na, O) - Small size, high reactivity</div>
-            </div>
-            <div class="legend-item">
-                <div class="legend-color" style="background: rgb(150, 150, 255);"></div>
-                <div><strong>Blue:</strong> Medium atoms (Be, Mg, N) - Moderate size and bonding</div>
-            </div>
-            <div class="legend-item">
-                <div class="legend-color" style="background: rgb(100, 255, 100);"></div>
-                <div><strong>Green:</strong> Larger atoms (B, Al) - More bonds possible</div>
-            </div>
-            <div class="legend-item">
-                <div class="legend-color" style="background: rgb(100, 100, 100);"></div>
-                <div><strong>Gray:</strong> Carbon/Silicon - Versatile bonding (size = 4 bonds)</div>
-            </div>
-            <div class="legend-item">
-                <div class="legend-color" style="background: rgb(255, 255, 100);"></div>
-                <div><strong>Yellow:</strong> Heavy atoms (F, P) - Large size, many bonds</div>
-            </div>
-            <p style="margin-top: 10px;"><strong>Size:</strong> Larger atoms have higher atomic numbers, more bonds (valency), and stronger attraction radius. Small dots around atom = available bond slots.</p>
-            <p><strong>Charge:</strong> Yellow +/- symbol shows if atom is charged (affects bonding).</p>
-        </div>
         
         <div class="info-panel" style="margin-top: 10px;">
             <strong>Controls:</strong> SPACE = Pause/Play | Drag = Pan | Wheel = Zoom
@@ -380,10 +414,14 @@
         <div id="particle-types-container"></div>
     </div>
     
+    <script src="spatialGrid.js"></script>
     <script src="particleTypes.js"></script>
     <script src="atom.js"></script>
     <script src="bond.js"></script>
     <script src="simulator.js"></script>
     <script src="sketch.js"></script>
+    <!-- Uncomment to use GPU version (experimental): -->
+    <!-- <script src="gpuSimulator.js"></script> -->
+    <!-- <script src="gpuSketch.js"></script> -->
 </body>
 </html>

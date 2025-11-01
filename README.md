@@ -1,4 +1,4 @@
-# Atomic Bonds Simulator
+# Molecule Simulator
 
 A 2D atom-based emergent simulator built with p5.js where simple atoms interact through abstracted physical and chemical rules to form complex molecular structures over time.
 
@@ -69,6 +69,20 @@ Over time, you'll observe:
 - `bond.js`: Bond class with spring dynamics
 - `simulator.js`: Main simulation engine and physics
 - `sketch.js`: p5.js setup and draw loop
+- `spatialGrid.js`: Spatial partitioning for performance optimization
+- `particleTypes.js`: Particle type manager and default configurations
+
+## Deployment
+
+### GitHub Pages
+
+This project is ready to deploy on GitHub Pages! See `GITHUB_PAGES_SETUP.md` for detailed instructions.
+
+Quick setup:
+1. Push code to GitHub
+2. Go to Settings → Pages
+3. Select main branch as source
+4. Your site will be live at `https://yourusername.github.io/repository-name/`
 
 ## Technical Details
 

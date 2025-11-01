@@ -20,6 +20,12 @@ function setup() {
     
     // Setup pan/zoom
     setupPanZoom();
+    
+    // Initialize statistics panel immediately after simulator is set up
+    // Use setTimeout to ensure DOM is ready
+    setTimeout(() => {
+        updateStatisticsPanel();
+    }, 0);
 }
 
 function windowResized() {
@@ -61,11 +67,19 @@ function setupControls() {
     
     // Temperature
     syncControls('temperature', 'temperature-input', 
-        (v) => simulator.temperature = v, 0, 10, 0.1);
+        (v) => simulator.temperature = v, 0, 100, 0.1);
     
     // Attraction Strength
     syncControls('attraction', 'attraction-input',
         (v) => simulator.attractionStrength = v, 0, 10, 0.1);
+    
+    // Electromagnetic Strength
+    syncControls('electromagnetic-strength', 'electromagnetic-strength-input',
+        (v) => simulator.electromagneticStrength = v, 0, 500, 10);
+    
+    // Thermal Noise
+    syncControls('thermal-noise', 'thermal-noise-input',
+        (v) => simulator.thermalNoise = v, 0, 5, 0.1);
     
     // Atom Types
     syncControls('atom-types', 'atom-types-input',
@@ -79,7 +93,7 @@ function setupControls() {
     
     // Damping
     syncControls('damping', 'damping-input',
-        (v) => simulator.damping = v, 0.5, 1.0, 0.01);
+        (v) => simulator.damping = v, 0.1, 1.0, 0.01);
     
     // Max Velocity
     syncControls('max-velocity', 'max-velocity-input',
@@ -92,6 +106,10 @@ function setupControls() {
     // Collision Strength
     syncControls('collision-strength', 'collision-strength-input',
         (v) => simulator.collisionStrength = v, 100, 2000, 50);
+    
+    // Min Distance
+    syncControls('min-distance', 'min-distance-input',
+        (v) => simulator.minDistance = v, 0.5, 10, 0.5);
     
     // Scene Width
     syncControls('scene-width', 'scene-width-input',
@@ -115,11 +133,13 @@ function setupControls() {
         const numTypes = parseInt(document.getElementById('atom-types').value);
         simulator.reset(numTypes);
         buildParticleTypeEditor(); // Rebuild UI after reset
+        updateStatisticsPanel(); // Update statistics after reset
     });
     
     // Randomize button
     document.getElementById('randomize-btn').addEventListener('click', () => {
         simulator.randomize();
+        updateStatisticsPanel(); // Update statistics after randomize
     });
     
     // Show forces checkbox
@@ -133,15 +153,86 @@ function setupControls() {
     });
 }
 
+let frameCountStart = 0;
+let lastFPS = 0;
+let fpsCounter = 0;
+let fpsTime = 0;
+
 function draw() {
     // Dark background
     background(20, 25, 40);
+    
+    // Calculate FPS
+    fpsCounter++;
+    if (millis() - fpsTime > 1000) {
+        lastFPS = fpsCounter;
+        fpsCounter = 0;
+        fpsTime = millis();
+    }
     
     // Update simulation
     simulator.update();
     
     // Display simulation
     simulator.display();
+    
+    // Update statistics panel (every few frames for performance)
+    // Debug overlay is updated within updateStatisticsPanel
+    if (frameCount % 10 === 0) {
+        updateStatisticsPanel();
+    } else {
+        // Still update debug overlay every frame (it's lightweight)
+        displayDebugOverlay();
+    }
+}
+
+function displayDebugOverlay() {
+    // Update debug stats in the statistics panel
+    if (!simulator) return;
+    
+    const avgVelocity = simulator.atoms.length > 0 
+        ? simulator.atoms.reduce((sum, a) => sum + a.vel.mag(), 0) / simulator.atoms.length 
+        : 0;
+    
+    const debugFrame = document.getElementById('stat-frame');
+    const debugFPS = document.getElementById('stat-fps');
+    const debugAvgVel = document.getElementById('stat-avg-velocity');
+    const debugMode = document.getElementById('stat-mode');
+    const debugScene = document.getElementById('stat-scene');
+    const debugZoom = document.getElementById('stat-zoom');
+    
+    if (debugFrame) debugFrame.textContent = frameCount;
+    if (debugFPS) debugFPS.textContent = lastFPS;
+    if (debugAvgVel) debugAvgVel.textContent = avgVelocity.toFixed(2);
+    if (debugMode) debugMode.textContent = simulator.useSpatialPartitioning && simulator.atoms.length > 50 ? 'Optimized' : 'Standard';
+    if (debugScene) debugScene.textContent = `${simulator.sceneWidth}x${simulator.sceneHeight}`;
+    if (debugZoom) debugZoom.textContent = `${simulator.zoom.toFixed(2)}x`;
+}
+
+function updateStatisticsPanel() {
+    if (!simulator) return;
+    
+    const stats = simulator.getMoleculeStats();
+    
+    // Update all statistics elements safely
+    const statAtoms = document.getElementById('stat-atoms');
+    const statBonds = document.getElementById('stat-bonds');
+    const statMolecules = document.getElementById('stat-molecules');
+    const statLone = document.getElementById('stat-lone');
+    const statLargest = document.getElementById('stat-largest');
+    const statPopularSize = document.getElementById('stat-popular-size');
+    const statPopularCount = document.getElementById('stat-popular-count');
+    
+    if (statAtoms) statAtoms.textContent = simulator.atoms.length;
+    if (statBonds) statBonds.textContent = simulator.bonds.length;
+    if (statMolecules) statMolecules.textContent = stats.total;
+    if (statLone) statLone.textContent = stats.loneAtoms;
+    if (statLargest) statLargest.textContent = stats.largestSize;
+    if (statPopularSize) statPopularSize.textContent = stats.mostPopularSize;
+    if (statPopularCount) statPopularCount.textContent = stats.mostPopularCount;
+    
+    // Also update debug info
+    displayDebugOverlay();
 }
 
 function keyPressed() {
@@ -235,53 +326,103 @@ function createParticleTypePanel(type) {
         </div>
         <div class="mini-control">
             <label>Count:</label>
-            <input type="range" id="count-${type.atomicNumber}" min="0" max="100" step="1" value="${type.count || 10}">
-            <input type="number" id="count-input-${type.atomicNumber}" value="${type.count || 10}">
+            <div class="control-with-lock">
+                <input type="range" id="count-${type.atomicNumber}" min="0" max="100" step="1" value="${type.count || 10}">
+                <input type="number" id="count-input-${type.atomicNumber}" value="${type.count || 10}">
+                <input type="checkbox" class="lock-checkbox" id="lock-count-${type.atomicNumber}" ${(type.locked && type.locked.count) ? 'checked' : ''}>
+            </div>
         </div>
         <div class="color-picker-row">
             <label>Color:</label>
-            <input type="color" id="color-${type.atomicNumber}" value="${hexColor}">
+            <div class="control-with-lock">
+                <input type="color" id="color-${type.atomicNumber}" value="${hexColor}">
+                <input type="checkbox" class="lock-checkbox" id="lock-color-${type.atomicNumber}" ${(type.locked && type.locked.color) ? 'checked' : ''}>
+            </div>
         </div>
         <div class="mini-control">
             <label>Radius:</label>
-            <input type="range" id="radius-${type.atomicNumber}" min="3" max="40" step="1" value="${type.radius}">
-            <input type="number" id="radius-input-${type.atomicNumber}" min="3" max="40" step="1" value="${type.radius}">
+            <div class="control-with-lock">
+                <input type="range" id="radius-${type.atomicNumber}" min="3" max="40" step="1" value="${type.radius}">
+                <input type="number" id="radius-input-${type.atomicNumber}" value="${type.radius}">
+                <input type="checkbox" class="lock-checkbox" id="lock-radius-${type.atomicNumber}" ${(type.locked && type.locked.radius) ? 'checked' : ''}>
+            </div>
         </div>
         <div class="mini-control">
             <label>Mass:</label>
-            <input type="range" id="mass-${type.atomicNumber}" min="0.1" max="20" step="0.1" value="${type.mass}">
-            <input type="number" id="mass-input-${type.atomicNumber}" min="0.1" max="20" step="0.1" value="${type.mass}">
+            <div class="control-with-lock">
+                <input type="range" id="mass-${type.atomicNumber}" min="0.1" max="20" step="0.1" value="${type.mass}">
+                <input type="number" id="mass-input-${type.atomicNumber}" value="${type.mass}">
+                <input type="checkbox" class="lock-checkbox" id="lock-mass-${type.atomicNumber}" ${(type.locked && type.locked.mass) ? 'checked' : ''}>
+            </div>
         </div>
         <div class="mini-control">
             <label>Valency:</label>
-            <input type="range" id="valency-${type.atomicNumber}" min="0" max="8" step="1" value="${type.valency}">
-            <input type="number" id="valency-input-${type.atomicNumber}" min="0" max="8" step="1" value="${type.valency}">
+            <div class="control-with-lock">
+                <input type="range" id="valency-${type.atomicNumber}" min="0" max="8" step="1" value="${type.valency}">
+                <input type="number" id="valency-input-${type.atomicNumber}" value="${type.valency}">
+                <input type="checkbox" class="lock-checkbox" id="lock-valency-${type.atomicNumber}" ${(type.locked && type.locked.valency) ? 'checked' : ''}>
+            </div>
         </div>
         <div class="mini-control">
             <label>Attract Radius:</label>
-            <input type="range" id="attract-${type.atomicNumber}" min="10" max="150" step="5" value="${type.attractionRadius}">
-            <input type="number" id="attract-input-${type.atomicNumber}" min="10" max="150" step="5" value="${type.attractionRadius}">
+            <div class="control-with-lock">
+                <input type="range" id="attract-${type.atomicNumber}" min="10" max="150" step="5" value="${type.attractionRadius}">
+                <input type="number" id="attract-input-${type.atomicNumber}" value="${type.attractionRadius}">
+                <input type="checkbox" class="lock-checkbox" id="lock-attract-${type.atomicNumber}" ${(type.locked && type.locked.attractionRadius) ? 'checked' : ''}>
+            </div>
         </div>
         <div class="mini-control">
             <label>Bond Distance:</label>
-            <input type="range" id="bond-${type.atomicNumber}" min="5" max="80" step="2" value="${type.bondingDistance}">
-            <input type="number" id="bond-input-${type.atomicNumber}" min="5" max="80" step="2" value="${type.bondingDistance}">
+            <div class="control-with-lock">
+                <input type="range" id="bond-${type.atomicNumber}" min="5" max="80" step="2" value="${type.bondingDistance}">
+                <input type="number" id="bond-input-${type.atomicNumber}" value="${type.bondingDistance}">
+                <input type="checkbox" class="lock-checkbox" id="lock-bond-${type.atomicNumber}" ${(type.locked && type.locked.bondingDistance) ? 'checked' : ''}>
+            </div>
         </div>
         <div class="mini-control">
             <label>Base Charge:</label>
-            <input type="range" id="charge-${type.atomicNumber}" min="-2" max="2" step="0.1" value="${type.baseCharge}">
-            <input type="number" id="charge-input-${type.atomicNumber}" min="-2" max="2" step="0.1" value="${type.baseCharge}">
+            <div class="control-with-lock">
+                <input type="range" id="charge-${type.atomicNumber}" min="-2" max="2" step="0.1" value="${type.baseCharge}">
+                <input type="number" id="charge-input-${type.atomicNumber}" value="${type.baseCharge}">
+                <input type="checkbox" class="lock-checkbox" id="lock-charge-${type.atomicNumber}" ${(type.locked && type.locked.baseCharge) ? 'checked' : ''}>
+            </div>
         </div>
         <div class="mini-control">
             <label>Charge Range:</label>
-            <input type="range" id="chargeRange-${type.atomicNumber}" min="0" max="1" step="0.05" value="${type.chargeRange}">
-            <input type="number" id="chargeRange-input-${type.atomicNumber}" min="0" max="1" step="0.05" value="${type.chargeRange}">
+            <div class="control-with-lock">
+                <input type="range" id="chargeRange-${type.atomicNumber}" min="0" max="1" step="0.05" value="${type.chargeRange}">
+                <input type="number" id="chargeRange-input-${type.atomicNumber}" value="${type.chargeRange}">
+                <input type="checkbox" class="lock-checkbox" id="lock-chargeRange-${type.atomicNumber}" ${(type.locked && type.locked.chargeRange) ? 'checked' : ''}>
+            </div>
         </div>
-        <button class="randomize-type-btn" data-atomic-number="${type.atomicNumber}">🎲 Randomize</button>
+        <button class="randomize-type-btn" data-atomic-number="${type.atomicNumber}">Randomize</button>
     `;
     
     // Setup event listeners
     const atomicNum = type.atomicNumber;
+    
+    // Helper to update lock state
+    function updateLock(prop, checkboxId) {
+        const checkbox = panel.querySelector(checkboxId);
+        if (checkbox) {
+            checkbox.addEventListener('change', (e) => {
+                const type = simulator.typeManager.getType(atomicNum);
+                if (!type.locked) type.locked = {};
+                type.locked[prop] = e.target.checked;
+            });
+        }
+    }
+    
+    // Setup lock checkboxes
+    updateLock('count', `#lock-count-${atomicNum}`);
+    updateLock('color', `#lock-color-${atomicNum}`);
+    updateLock('radius', `#lock-radius-${atomicNum}`);
+    updateLock('mass', `#lock-mass-${atomicNum}`);
+    updateLock('valency', `#lock-valency-${atomicNum}`);
+    updateLock('attractionRadius', `#lock-attract-${atomicNum}`);
+    updateLock('bondingDistance', `#lock-bond-${atomicNum}`);
+    updateLock('baseCharge', `#lock-charge-${atomicNum}`);
+    updateLock('chargeRange', `#lock-chargeRange-${atomicNum}`);
     
     // Color picker
     const colorInput = panel.querySelector(`#color-${atomicNum}`);
@@ -333,6 +474,7 @@ function createParticleTypePanel(type) {
             simulator.typeManager.updateType(atomicNum, 'count', count);
             // Reinitialize atoms when count changes
             simulator.initializeAtoms();
+            updateStatisticsPanel(); // Update statistics when atoms are reinitialized
         });
     
     // Radius
@@ -388,31 +530,42 @@ function createParticleTypePanel(type) {
     const randomizeBtn = panel.querySelector(`.randomize-type-btn`);
     randomizeBtn.addEventListener('click', () => {
         const randomized = simulator.typeManager.randomizeType(atomicNum);
+        const type = simulator.typeManager.getType(atomicNum);
+        const locked = type.locked || {};
         
-        // Update all inputs (count is preserved, not randomized)
-        const hex = rgbToHex(randomized.color[0], randomized.color[1], randomized.color[2]);
-        colorInput.value = hex;
-        
-        panel.querySelector(`#radius-${atomicNum}`).value = randomized.radius;
-        panel.querySelector(`#radius-input-${atomicNum}`).value = randomized.radius;
-        
-        panel.querySelector(`#mass-${atomicNum}`).value = randomized.mass;
-        panel.querySelector(`#mass-input-${atomicNum}`).value = randomized.mass;
-        
-        panel.querySelector(`#valency-${atomicNum}`).value = randomized.valency;
-        panel.querySelector(`#valency-input-${atomicNum}`).value = randomized.valency;
-        
-        panel.querySelector(`#attract-${atomicNum}`).value = randomized.attractionRadius;
-        panel.querySelector(`#attract-input-${atomicNum}`).value = randomized.attractionRadius;
-        
-        panel.querySelector(`#bond-${atomicNum}`).value = randomized.bondingDistance;
-        panel.querySelector(`#bond-input-${atomicNum}`).value = randomized.bondingDistance;
-        
-        panel.querySelector(`#charge-${atomicNum}`).value = randomized.baseCharge;
-        panel.querySelector(`#charge-input-${atomicNum}`).value = randomized.baseCharge;
-        
-        panel.querySelector(`#chargeRange-${atomicNum}`).value = randomized.chargeRange;
-        panel.querySelector(`#chargeRange-input-${atomicNum}`).value = randomized.chargeRange;
+        // Update only unlocked properties in UI
+        if (!locked.color) {
+            const hex = rgbToHex(randomized.color[0], randomized.color[1], randomized.color[2]);
+            colorInput.value = hex;
+        }
+        if (!locked.radius) {
+            panel.querySelector(`#radius-${atomicNum}`).value = randomized.radius;
+            panel.querySelector(`#radius-input-${atomicNum}`).value = randomized.radius;
+        }
+        if (!locked.mass) {
+            panel.querySelector(`#mass-${atomicNum}`).value = randomized.mass;
+            panel.querySelector(`#mass-input-${atomicNum}`).value = randomized.mass;
+        }
+        if (!locked.valency) {
+            panel.querySelector(`#valency-${atomicNum}`).value = randomized.valency;
+            panel.querySelector(`#valency-input-${atomicNum}`).value = randomized.valency;
+        }
+        if (!locked.attractionRadius) {
+            panel.querySelector(`#attract-${atomicNum}`).value = randomized.attractionRadius;
+            panel.querySelector(`#attract-input-${atomicNum}`).value = randomized.attractionRadius;
+        }
+        if (!locked.bondingDistance) {
+            panel.querySelector(`#bond-${atomicNum}`).value = randomized.bondingDistance;
+            panel.querySelector(`#bond-input-${atomicNum}`).value = randomized.bondingDistance;
+        }
+        if (!locked.baseCharge) {
+            panel.querySelector(`#charge-${atomicNum}`).value = randomized.baseCharge;
+            panel.querySelector(`#charge-input-${atomicNum}`).value = randomized.baseCharge;
+        }
+        if (!locked.chargeRange) {
+            panel.querySelector(`#chargeRange-${atomicNum}`).value = randomized.chargeRange;
+            panel.querySelector(`#chargeRange-input-${atomicNum}`).value = randomized.chargeRange;
+        }
         
         simulator.updateAllAtomsFromTypes();
     });
