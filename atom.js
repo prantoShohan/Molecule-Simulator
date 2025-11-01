@@ -206,7 +206,126 @@ class Atom {
     }
     
     applyForce(force) {
-        this.acc.add(force.div(this.mass));
+        // Apply force to acceleration (F = ma, so a = F/m)
+        this.acc.add(p5.Vector.div(force, this.mass));
+    }
+    
+    calculateStability(massCapacity = null) {
+        // Stability based on mass capacity
+        // If massCapacity is null, use default (mass * 5)
+        if (massCapacity === null) {
+            massCapacity = this.mass * 5; // Default: can support 5x its own mass
+        }
+        
+        // Calculate total mass of all bonded atoms
+        let totalBondedMass = 0;
+        for (let bond of this.bonds) {
+            const otherAtom = bond.getOtherAtom(this);
+            if (otherAtom) {
+                totalBondedMass += otherAtom.mass;
+            }
+        }
+        
+        // Stability: 1.0 if within capacity, decreases as mass exceeds capacity
+        if (totalBondedMass <= massCapacity) {
+            return 1.0; // Stable
+        } else {
+            // Unstable if exceeds capacity
+            const excess = totalBondedMass - massCapacity;
+            const instability = min(1.0, excess / massCapacity); // 0 to 1
+            return max(0, 1 - instability);
+        }
+    }
+    
+    getTotalBondedMass() {
+        // Helper to get total mass of bonded atoms
+        let totalMass = 0;
+        for (let bond of this.bonds) {
+            const otherAtom = bond.getOtherAtom(this);
+            if (otherAtom) {
+                totalMass += otherAtom.mass;
+            }
+        }
+        return totalMass;
+    }
+    
+    applyAngularForces(angularStrength = 1.0, temperatureFactor = 1.0) {
+        // VSEPR-like: bonds repel each other to maximize angles
+        // Stronger at lower temperatures (temperatureFactor increases as temp decreases)
+        
+        if (this.bonds.length < 2) return; // Need at least 2 bonds for angular forces
+        
+        const numBonds = this.bonds.length;
+        
+        // Calculate ideal angle based on number of bonds
+        // For 2 bonds: 180°, 3 bonds: 120°, 4 bonds: 109.5° (tetrahedral), etc.
+        let idealAngle;
+        if (numBonds === 2) {
+            idealAngle = PI; // 180 degrees
+        } else if (numBonds === 3) {
+            idealAngle = (2 * PI) / 3; // 120 degrees
+        } else if (numBonds === 4) {
+            idealAngle = acos(-1/3); // ~109.5 degrees (tetrahedral)
+        } else {
+            // For more bonds, try to distribute evenly
+            idealAngle = (2 * PI) / numBonds;
+        }
+        
+        // Apply repulsion forces between all pairs of bonds
+        for (let i = 0; i < this.bonds.length; i++) {
+            for (let j = i + 1; j < this.bonds.length; j++) {
+                const bond1 = this.bonds[i];
+                const bond2 = this.bonds[j];
+                
+                const otherAtom1 = bond1.getOtherAtom(this);
+                const otherAtom2 = bond2.getOtherAtom(this);
+                
+                if (!otherAtom1 || !otherAtom2) continue;
+                
+                // Calculate vectors from this atom to bonded atoms
+                const vec1 = p5.Vector.sub(otherAtom1.pos, this.pos);
+                const vec2 = p5.Vector.sub(otherAtom2.pos, this.pos);
+                
+                const dist1 = vec1.mag();
+                const dist2 = vec2.mag();
+                
+                if (dist1 < 0.1 || dist2 < 0.1) continue;
+                
+                // Calculate current angle between bonds
+                const vec1Norm = vec1.copy().normalize();
+                const vec2Norm = vec2.copy().normalize();
+                const currentAngle = acos(max(-1, min(1, vec1Norm.dot(vec2Norm)))); // Clamp to avoid NaN
+                
+                // Calculate desired separation (perpendicular to each bond vector)
+                const angleDiff = idealAngle - currentAngle;
+                
+                // Force strength depends on angle difference and temperature
+                // Stronger force when angles are too small (bonds too close)
+                // Stronger at lower temperatures
+                const forceStrength = angularStrength * temperatureFactor * 
+                                     max(0, 1 - currentAngle / idealAngle) * 5;
+                
+                // Apply perpendicular forces to push bonds apart
+                // Rotate vec1Norm 90 degrees to get perpendicular direction
+                const perp1 = createVector(-vec1Norm.y, vec1Norm.x);
+                const perp2 = createVector(vec2Norm.y, -vec2Norm.x);
+                
+                // Apply forces perpendicular to each bond to push them apart
+                if (abs(angleDiff) > 0.1 && forceStrength > 0.01) { // Only apply if angle is significantly off
+                    const force1 = perp1.copy().mult(forceStrength * (angleDiff > 0 ? 1 : -1) * 0.5);
+                    const force2 = perp2.copy().mult(forceStrength * (angleDiff > 0 ? 1 : -1) * 0.5);
+                    
+                    // Apply forces to the bonded atoms (not this atom directly)
+                    // This creates the angular repulsion effect
+                    otherAtom1.applyForce(force1);
+                    otherAtom2.applyForce(force2);
+                    
+                    // Also apply slight counter-force to this atom for stability
+                    this.applyForce(force1.copy().mult(-0.2));
+                    this.applyForce(force2.copy().mult(-0.2));
+                }
+            }
+        }
     }
     
     display() {

@@ -17,6 +17,9 @@ class Simulator {
         this.boundaryMode = 'wrap'; // 'wrap', 'bounce', 'contain'
         this.collisionStrength = 350; // Strength of collision repulsion
         this.minDistance = 2; // Minimum distance before strong repulsion kicks in
+        this.angularForceStrength = 0.5; // Strength of angular repulsion between bonds (VSEPR)
+        this.enableStability = true; // Enable/disable stability system
+        this.massCapacityMultiplier = 5.0; // How many times an atom's mass it can support
         
         // Pan/Zoom parameters
         this.offsetX = 0;
@@ -91,16 +94,54 @@ class Simulator {
         this.calculateCollisionForces(); // First: prevent overlaps
         this.calculateElectromagneticForces();
         this.calculateBondingForces();
+        
+        // Apply angular forces (VSEPR) - bonds repel each other to maximize angles
+        // Stronger at lower temperatures (temperatureFactor increases as temp decreases)
+        const temperatureFactor = max(0.1, 2.0 / (this.temperature + 0.1)); // Higher at lower temp
+        this.calculateAngularForces(temperatureFactor);
+        
         this.applyThermalMotion();
         
         // Try to form new bonds
         this.attemptBondFormation();
         
-        // Update bonds (apply spring forces, check for breaking)
+        // Update bonds (apply spring forces, check for breaking with stability)
         for (let i = this.bonds.length - 1; i >= 0; i--) {
-            this.bonds[i].applyForces(this.attractionStrength, this.springConstant);
-            // Remove broken bonds
-            if (this.bonds[i].getLength() > this.bonds[i].maxStretch * 1.1) {
+            const bond = this.bonds[i];
+            bond.applyForces(this.attractionStrength, this.springConstant);
+            
+            // Check if bond should break
+            let shouldBreak = false;
+            
+            // Standard break check (distance)
+            if (bond.getLength() > bond.maxStretch) {
+                shouldBreak = true;
+            }
+            
+            // Stability-based break check (if enabled)
+            if (this.enableStability && !shouldBreak) {
+                const massCapacity1 = bond.atom1.mass * this.massCapacityMultiplier;
+                const massCapacity2 = bond.atom2.mass * this.massCapacityMultiplier;
+                
+                const stability1 = bond.atom1.calculateStability(massCapacity1);
+                const stability2 = bond.atom2.calculateStability(massCapacity2);
+                
+                // If either atom becomes unstable (stability < threshold), break bonds
+                // Start breaking bonds from the most unstable atom
+                const stabilityThreshold = 0.3; // Break if stability drops below 30%
+                
+                if (stability1 < stabilityThreshold || stability2 < stabilityThreshold) {
+                    // Unstable: break this bond
+                    // Prioritize breaking bonds from the more unstable atom
+                    const minStability = min(stability1, stability2);
+                    if (minStability < stabilityThreshold) {
+                        shouldBreak = true;
+                    }
+                }
+            }
+            
+            if (shouldBreak) {
+                bond.break();
                 this.bonds.splice(i, 1);
             }
         }
@@ -267,6 +308,16 @@ class Simulator {
     calculateBondingForces() {
         // Bond forces are applied in the update() method for each bond
         // This method is reserved for additional bonding-related calculations if needed
+    }
+    
+    calculateAngularForces(temperatureFactor = 1.0) {
+        // Apply VSEPR-like angular repulsion forces
+        // Bonds on the same atom try to maximize angles between them
+        for (let atom of this.atoms) {
+            if (atom.bonds.length >= 2) {
+                atom.applyAngularForces(this.angularForceStrength, temperatureFactor);
+            }
+        }
     }
     
     applyThermalMotion() {

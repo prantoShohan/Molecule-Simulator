@@ -111,6 +111,10 @@ function setupControls() {
     syncControls('min-distance', 'min-distance-input',
         (v) => simulator.minDistance = v, 0.5, 10, 0.5);
     
+    // Angular Force Strength
+    syncControls('angular-force', 'angular-force-input',
+        (v) => simulator.angularForceStrength = v, 0, 5, 0.1);
+    
     // Scene Width
     syncControls('scene-width', 'scene-width-input',
         (v) => {
@@ -150,6 +154,11 @@ function setupControls() {
     // Show energy map checkbox
     document.getElementById('show-energy').addEventListener('change', (e) => {
         simulator.showEnergyMap = e.target.checked;
+    });
+    
+    // Enable stability checkbox
+    document.getElementById('enable-stability').addEventListener('change', (e) => {
+        simulator.enableStability = e.target.checked;
     });
 }
 

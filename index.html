@@ -355,6 +355,14 @@
         </div>
         
         <div class="control-group">
+            <label for="angular-force">Angular Force (0-5):</label>
+            <div class="control-row">
+                <input type="range" id="angular-force" min="0" max="5" step="0.1" value="0.5">
+                <input type="number" id="angular-force-input" value="0.5">
+            </div>
+        </div>
+        
+        <div class="control-group">
             <label for="scene-width">Scene Width:</label>
             <div class="control-row">
                 <input type="range" id="scene-width" min="500" max="5000" step="100" value="1500">
@@ -385,6 +393,7 @@
         <div class="checkbox-group">
             <label><input type="checkbox" id="show-forces"> Show Forces</label>
             <label><input type="checkbox" id="show-energy"> Show Energy Map</label>
+            <label><input type="checkbox" id="enable-stability" checked> Enable Stability (Mass Capacity)</label>
         </div>
         
         
