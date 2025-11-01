@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Atomic Bonds Simulator</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: white;
+            height: 100vh;
+            overflow: hidden;
+            position: relative;
+        }
+        #canvas-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 0;
+        }
+        #sidebar {
+            position: fixed;
+            left: 0;
+            top: 0;
+            width: 280px;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 20px;
+            overflow-y: auto;
+            backdrop-filter: blur(10px);
+            box-shadow: 2px 0 10px rgba(0, 0, 0, 0.3);
+            z-index: 10;
+            pointer-events: auto;
+        }
+        #right-sidebar {
+            position: fixed;
+            right: 0;
+            top: 0;
+            width: 320px;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 20px;
+            overflow-y: auto;
+            backdrop-filter: blur(10px);
+            box-shadow: -2px 0 10px rgba(0, 0, 0, 0.3);
+            z-index: 10;
+            pointer-events: auto;
+        }
+        .particle-type-panel {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .particle-type-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .particle-type-name {
+            font-weight: bold;
+            font-size: 14px;
+        }
+        .color-picker-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+        input[type="color"] {
+            width: 40px;
+            height: 30px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .mini-control {
+            display: flex;
+            gap: 5px;
+            align-items: center;
+            margin-bottom: 6px;
+            font-size: 11px;
+        }
+        .mini-control label {
+            width: 80px;
+            font-size: 10px;
+            margin: 0;
+        }
+        .mini-control input[type="range"] {
+            flex: 1;
+            height: 4px;
+        }
+        .mini-control input[type="number"] {
+            width: 50px;
+            padding: 3px;
+            font-size: 10px;
+        }
+        .randomize-type-btn {
+            width: 100%;
+            padding: 6px;
+            background: #ff9800;
+            font-size: 11px;
+            margin-top: 8px;
+        }
+        .randomize-type-btn:hover {
+            background: #f57c00;
+        }
+        h1 {
+            margin: 0 0 20px 0;
+            font-size: 20px;
+            text-align: center;
+            border-bottom: 2px solid rgba(255, 255, 255, 0.3);
+            padding-bottom: 10px;
+        }
+        .control-group {
+            margin-bottom: 15px;
+        }
+        .control-group label {
+            display: block;
+            font-size: 11px;
+            margin-bottom: 5px;
+            opacity: 0.9;
+        }
+        .control-row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        input[type="range"] {
+            flex: 1;
+            min-width: 100px;
+        }
+        input[type="number"] {
+            width: 60px;
+            padding: 5px;
+            border-radius: 4px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            font-size: 12px;
+        }
+        input[type="number"]::-webkit-inner-spin-button,
+        input[type="number"]::-webkit-outer-spin-button {
+            opacity: 1;
+        }
+        select {
+            width: 100%;
+            padding: 5px;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            font-size: 12px;
+        }
+        select option {
+            background: #2a5298;
+            color: white;
+        }
+        button {
+            width: 100%;
+            padding: 10px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 13px;
+            margin-bottom: 10px;
+            transition: background 0.3s;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        button:active {
+            transform: scale(0.98);
+        }
+        .checkbox-group {
+            margin-top: 10px;
+        }
+        .checkbox-group label {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            margin-bottom: 5px;
+            font-size: 12px;
+        }
+        input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+        }
+        .info-panel {
+            margin-top: 15px;
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            font-size: 11px;
+            line-height: 1.6;
+        }
+        .info-panel h3 {
+            margin: 0 0 10px 0;
+            font-size: 13px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+            padding-bottom: 5px;
+        }
+        .info-panel p {
+            margin: 5px 0;
+        }
+        .info-panel ul {
+            margin: 5px 0;
+            padding-left: 20px;
+        }
+        .info-panel li {
+            margin: 3px 0;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin: 5px 0;
+            gap: 8px;
+        }
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+    </style>
+</head>
+<body>
+    <div id="sidebar">
+        <h1>Atomic Bonds Simulator</h1>
+        
+        <div class="control-group">
+            <label for="temperature">Temperature (0-10):</label>
+            <div class="control-row">
+                <input type="range" id="temperature" min="0" max="10" step="0.1" value="1.0">
+                <input type="number" id="temperature-input" min="0" max="10" step="0.1" value="1.0">
+            </div>
+        </div>
+        
+        <div class="control-group">
+            <label for="attraction">Attraction Strength (0-10):</label>
+            <div class="control-row">
+                <input type="range" id="attraction" min="0" max="10" step="0.1" value="1.0">
+                <input type="number" id="attraction-input" min="0" max="10" step="0.1" value="1.0">
+            </div>
+        </div>
+        
+        <div class="control-group">
+            <label for="atom-types">Atom Types (3-15):</label>
+            <div class="control-row">
+                <input type="range" id="atom-types" min="3" max="15" step="1" value="5">
+                <input type="number" id="atom-types-input" min="3" max="15" step="1" value="5">
+            </div>
+        </div>
+        
+        <div class="control-group">
+            <label for="damping">Damping (0.5-1.0):</label>
+            <div class="control-row">
+                <input type="range" id="damping" min="0.5" max="1.0" step="0.01" value="0.98">
+                <input type="number" id="damping-input" min="0.5" max="1.0" step="0.01" value="0.98">
+            </div>
+        </div>
+        
+        <div class="control-group">
+            <label for="max-velocity">Max Velocity (1-50):</label>
+            <div class="control-row">
+                <input type="range" id="max-velocity" min="1" max="50" step="1" value="10">
+                <input type="number" id="max-velocity-input" min="1" max="50" step="1" value="10">
+            </div>
+        </div>
+        
+        <div class="control-group">
+            <label for="spring-constant">Spring Stiffness (0.01-2.0):</label>
+            <div class="control-row">
+                <input type="range" id="spring-constant" min="0.01" max="2.0" step="0.01" value="0.1">
+                <input type="number" id="spring-constant-input" min="0.01" max="2.0" step="0.01" value="0.1">
+            </div>
+        </div>
+        
+        <div class="control-group">
+            <label for="collision-strength">Collision Strength (100-2000):</label>
+            <div class="control-row">
+                <input type="range" id="collision-strength" min="100" max="2000" step="50" value="500">
+                <input type="number" id="collision-strength-input" min="100" max="2000" step="50" value="500">
+            </div>
+        </div>
+        
+        <div class="control-group">
+            <label for="scene-width">Scene Width:</label>
+            <div class="control-row">
+                <input type="range" id="scene-width" min="500" max="5000" step="100" value="1000">
+                <input type="number" id="scene-width-input" value="1000">
+            </div>
+        </div>
+        
+        <div class="control-group">
+            <label for="scene-height">Scene Height:</label>
+            <div class="control-row">
+                <input type="range" id="scene-height" min="500" max="5000" step="100" value="700">
+                <input type="number" id="scene-height-input" value="700">
+            </div>
+        </div>
+        
+        <div class="control-group">
+            <label for="boundary-mode">Boundary Mode:</label>
+            <select id="boundary-mode">
+                <option value="wrap">Wrap Around</option>
+                <option value="bounce">Bounce</option>
+                <option value="contain">Contain</option>
+            </select>
+        </div>
+        
+        <button id="reset-btn">Reset</button>
+        <button id="randomize-btn">Randomize</button>
+        
+        <div class="checkbox-group">
+            <label><input type="checkbox" id="show-forces" checked> Show Forces</label>
+            <label><input type="checkbox" id="show-energy"> Show Energy Map</label>
+        </div>
+        
+        <div class="info-panel">
+            <h3>Particle Colors & Sizes</h3>
+            <div class="legend-item">
+                <div class="legend-color" style="background: rgb(255, 100, 100);"></div>
+                <div><strong>Red/Pink:</strong> Light atoms (H, Li, Na, O) - Small size, high reactivity</div>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: rgb(150, 150, 255);"></div>
+                <div><strong>Blue:</strong> Medium atoms (Be, Mg, N) - Moderate size and bonding</div>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: rgb(100, 255, 100);"></div>
+                <div><strong>Green:</strong> Larger atoms (B, Al) - More bonds possible</div>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: rgb(100, 100, 100);"></div>
+                <div><strong>Gray:</strong> Carbon/Silicon - Versatile bonding (size = 4 bonds)</div>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: rgb(255, 255, 100);"></div>
+                <div><strong>Yellow:</strong> Heavy atoms (F, P) - Large size, many bonds</div>
+            </div>
+            <p style="margin-top: 10px;"><strong>Size:</strong> Larger atoms have higher atomic numbers, more bonds (valency), and stronger attraction radius. Small dots around atom = available bond slots.</p>
+            <p><strong>Charge:</strong> Yellow +/- symbol shows if atom is charged (affects bonding).</p>
+        </div>
+        
+        <div class="info-panel" style="margin-top: 10px;">
+            <strong>Controls:</strong> SPACE = Pause/Play | Drag = Pan | Wheel = Zoom
+        </div>
+        
+        <div class="info-panel" style="margin-top: 10px;">
+            <h3>Physics Overview</h3>
+            <p><strong>Particles:</strong> Each particle has mass, charge, valency (max bonds), and size (radius).</p>
+            <p><strong>Forces:</strong></p>
+            <ul style="margin: 5px 0; padding-left: 20px; font-size: 10px;">
+                <li><strong>Collision:</strong> Strong repulsion when particles overlap (prevents merging)</li>
+                <li><strong>Electromagnetic:</strong> Opposite charges attract, like charges repel (inverse-square law)</li>
+                <li><strong>Bonding:</strong> Spring forces hold bonded particles at optimal distance</li>
+                <li><strong>Thermal:</strong> Random motion proportional to temperature</li>
+            </ul>
+            <p><strong>Temperature:</strong> Controls random thermal motion. Higher = more chaotic movement, particles move faster and bonds break more easily.</p>
+            <p><strong>Energy Map:</strong> Visualizes charge density - red areas show high electric potential energy. Useful for seeing charge distributions and bonding zones.</p>
+        </div>
+    </div>
+    
+    <div id="canvas-container"></div>
+    
+    <div id="right-sidebar">
+        <h2 style="margin: 0 0 15px 0; font-size: 16px; text-align: center; border-bottom: 2px solid rgba(255, 255, 255, 0.3); padding-bottom: 10px;">Particle Type Editor</h2>
+        <div id="particle-types-container"></div>
+    </div>
+    
+    <script src="particleTypes.js"></script>
+    <script src="atom.js"></script>
+    <script src="bond.js"></script>
+    <script src="simulator.js"></script>
+    <script src="sketch.js"></script>
+</body>
+</html>
